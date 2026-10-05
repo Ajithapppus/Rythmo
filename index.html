@@ -82,7 +82,64 @@ if('mediaSession' in navigator){const m=navigator.mediaSession;
  m.setActionHandler('previoustrack',()=>step(-1));m.setActionHandler('nexttrack',()=>step(1))}
 if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js');
 const JAMENDO_ID='YOUR_CLIENT_ID'; // free key from developer.jamendo.com
-async function jam(params){if(JAMENDO_ID==='YOUR_CLIENT_ID')throw new Error('id');
+async function jam(params){if(JAMENDO_ID==='- K. J. Yesudas
+- K. S. Chithra
+- M. G. Sreekumar
+- Sujatha Mohan
+- Vijay Yesudas
+- Vineeth Sreenivasan
+- Sithara Krishnakumar
+- Shweta Mohan
+- Haricharan
+- Karthik
+- Sooraj Santhosh
+- Jassie Gift
+- Najim Arshad
+- Hesham Abdul Wahab
+- Kapil Kapilan
+- Dabzee
+- Fejo
+- Vedan
+- Prithviraj Sukumaran
+- Pradeep Kumar
+- S. P. Balasubrahmanyam
+- K. S. Chithra
+- P. Susheela
+- Hariharan
+- Sid Sriram
+- Anirudh Ravichander
+- Shakthisree Gopalan
+- Dhee
+- Chinmayi
+- Pradeep Kumar
+- Saindhavi
+- Shweta Mohan
+- Haricharan
+- Andrea Jeremiah
+- Arivu
+- Hiphop Tamizha
+- Sean Roldan
+- Pradeep Ranganathan
+ Arijit Singh
+Shreya Ghoshal
+Sonu Nigam
+Sunidhi Chauhan
+Udit Narayan
+Kumar Sanu
+Alka Yagnik
+Neha Kakkar
+Armaan Malik
+Jubin Nautiyal
+Mohit Chauhan
+Shaan
+KK
+Atif Aslam
+Badshah
+King
+Divine
+Raftaar
+Emiway Bantai
+MC Stan')throw new Error('id');
  const r=await fetch('https://api.jamendo.com/v3.0/tracks/?client_id='+JAMENDO_ID+'&format=json&limit=20&audioformat=mp32&imagesize=300&'+params);
  const j=await r.json();return(j.results||[]).filter(t=>t.audio).map(t=>({id:'j'+t.id,title:t.name,artist:t.artist_name,album:t.album_name||'',language:'Full song',genre:'',artwork:t.image||'',preview_url:t.audio,release_date:t.releasedate||''}))}
 const find=q=>$('src').value==='jam'?jam('search='+encodeURIComponent(q)):it(q,null,30);
