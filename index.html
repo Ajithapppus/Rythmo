@@ -1,0 +1,83 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Rythmo</title><link rel="manifest" href="manifest.json"><meta name="theme-color" content="#0b0b12">
+<style>
+:root{--bg:#0b0b12;--card:#171723;--fg:#f2f2f8;--mut:#9a9ab0;--ac:#7c5cff}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:15px system-ui,sans-serif;padding:16px 16px 150px}
+h1{font-size:22px}h2{margin:24px 0 10px;font-size:18px}
+#q{width:100%;padding:14px 18px;border-radius:999px;border:0;background:var(--card);color:var(--fg);font-size:16px}
+.row{display:flex;gap:12px;overflow-x:auto;padding-bottom:6px}
+.card{flex:0 0 140px;background:var(--card);border-radius:14px;padding:10px;cursor:pointer;transition:transform .15s}
+.card:hover{transform:translateY(-3px)}.card img{width:100%;aspect-ratio:1;border-radius:10px;object-fit:cover;background:#222}
+.card b,.card small{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:6px}.card small{color:var(--mut)}
+#player{position:fixed;left:0;right:0;bottom:0;background:#12121c;border-top:1px solid #26263a;padding:10px 14px calc(10px + env(safe-area-inset-bottom))}
+#now{display:flex;gap:10px;align-items:center}#now img{width:48px;height:48px;border-radius:8px}
+#ctl{display:flex;gap:6px;justify-content:center;align-items:center;margin-top:6px;flex-wrap:wrap}
+button{background:none;border:0;color:var(--fg);font-size:20px;cursor:pointer;padding:6px 10px;border-radius:8px}button.on{color:var(--ac)}
+input[type=range]{accent-color:var(--ac)}#seek{width:100%}
+#queue{position:fixed;right:0;bottom:130px;width:min(320px,100%);max-height:50vh;overflow:auto;background:var(--card);border-radius:14px 0 0 14px;padding:10px;display:none}
+#queue div{display:flex;justify-content:space-between;padding:6px 0}#msg{color:#ffb4b4;font-size:13px}
+</style></head><body>
+<h1>🎵 Rythmo</h1>
+<input id="q" placeholder="Search songs, artists, albums..." autocomplete="off">
+<div id="results"></div><div id="home"></div>
+<div id="queue"></div>
+<div id="player">
+ <div id="now"><img id="art" alt=""><div><b id="t">Nothing playing</b><br><small id="a" style="color:var(--mut)"></small><div id="msg"></div></div></div>
+ <input id="seek" type="range" min="0" max="100" value="0">
+ <div id="ctl">
+  <button id="shuf" title="Shuffle">🔀</button><button id="prev">⏮</button><button id="play">▶️</button>
+  <button id="stop">⏹</button><button id="next">⏭</button><button id="rep" title="Repeat">🔁</button>
+  <button id="like">♡</button><button id="qb">☰</button>
+  <button id="mute">🔊</button><input id="vol" type="range" min="0" max="1" step=".05" value="1" style="width:80px">
+ </div>
+</div>
+<audio id="au" preload="none"></audio>
+<script>
+const $=id=>document.getElementById(id),au=$('au');
+let queue=[],idx=-1,shuffle=false,repeat=false,favs=JSON.parse(localStorage.favs||'[]'),stoppedByUser=false;
+const esc=s=>String(s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function cards(list){return list.map(s=>`<div class="card" data-s='${esc(JSON.stringify(s)).replace(/'/g,"&#39;")}'><img loading="lazy" src="${esc(s.artwork)}" onerror="this.style.visibility='hidden'"><b>${esc(s.title)}</b><small>${esc(s.artist)} · ${esc(s.language)}</small></div>`).join('')}
+function section(title,list,el){if(list.length)el.insertAdjacentHTML('beforeend',`<h2>${title}</h2><div class="row">${cards(list)}</div>`)}
+document.addEventListener('click',e=>{const c=e.target.closest('.card');if(!c)return;const s=JSON.parse(c.dataset.s);
+ const row=[...c.parentElement.children].map(x=>JSON.parse(x.dataset.s));queue=row;idx=row.findIndex(x=>x.id===s.id);load(true)});
+const LANGS=['Malayalam','Tamil','Hindi','English'];
+function detect(s){return /[\u0D00-\u0D7F]/.test(s)?'Malayalam':/[\u0B80-\u0BFF]/.test(s)?'Tamil':/[\u0900-\u097F]/.test(s)?'Hindi':'English'}
+async function it(term,l,limit=25){const r=await fetch('https://itunes.apple.com/search?media=music&entity=song&country=IN&limit='+limit+'&term='+encodeURIComponent(term));
+ const j=await r.json();return j.results.filter(t=>t.previewUrl).map(t=>({id:t.trackId,title:t.trackName,artist:t.artistName,album:t.collectionName||'',
+ language:l||detect(t.trackName+t.artistName),genre:t.primaryGenreName||'',artwork:(t.artworkUrl100||'').replace('100x100','400x400'),preview_url:t.previewUrl,release_date:(t.releaseDate||'').slice(0,10)}))}
+async function home(){const h=$('home');h.innerHTML='<p style="color:var(--mut)">Loading...</p>';
+ try{const all=await Promise.all(LANGS.map(l=>it(l+' new songs',l)));h.innerHTML='';
+ section('New Releases',all.flat().sort((a,b)=>b.release_date.localeCompare(a.release_date)).slice(0,20),h);
+ all.forEach((list,i)=>section(LANGS[i]+' Music',list,h));
+ }catch(e){h.innerHTML='<p id="msg">Could not load music. Check your internet connection.</p>'}
+ section('Recently Played',JSON.parse(localStorage.recent||'[]'),h)}
+let timer;$('q').oninput=e=>{clearTimeout(timer);timer=setTimeout(async()=>{const q=e.target.value.trim(),r=$('results');
+ r.innerHTML='';if(!q)return;try{section('Results',await it(q,null,30),r)}catch{r.textContent='Network error'}},250)};
+function load(play){const s=queue[idx];if(!s)return;$('msg').textContent='';au.src=s.preview_url;$('t').textContent=s.title;$('a').textContent=s.artist;$('art').src=s.artwork;
+ $('like').textContent=favs.includes(s.id)?'♥':'♡';
+ const rp=[s,...JSON.parse(localStorage.recent||'[]').filter(x=>x.id!==s.id)].slice(0,20);localStorage.recent=JSON.stringify(rp);
+ if('mediaSession' in navigator){navigator.mediaSession.metadata=new MediaMetadata({title:s.title,artist:s.artist,album:s.album,artwork:[{src:s.artwork,sizes:'400x400'}]})}
+ if(play){stoppedByUser=false;au.play().catch(()=>$('msg').textContent='Sorry, this song is currently unavailable.')}drawQueue()}
+function step(d){if(!queue.length)return;idx=shuffle?Math.floor(Math.random()*queue.length):(idx+d+queue.length)%queue.length;load(true)}
+au.onerror=()=>$('msg').textContent='Sorry, this song is currently unavailable.';
+au.onended=()=>{if(repeat){au.currentTime=0;au.play()}else if(idx<queue.length-1||shuffle)step(1)};
+au.onplay=()=>$('play').textContent='⏸';au.onpause=()=>$('play').textContent='▶️';
+au.ontimeupdate=()=>{$('seek').value=au.duration?au.currentTime/au.duration*100:0};
+$('seek').oninput=e=>{if(au.duration)au.currentTime=e.target.value/100*au.duration};
+$('play').onclick=()=>{if(au.src){au.paused?(stoppedByUser=false,au.play()):au.pause()}};
+$('stop').onclick=()=>{au.pause();au.currentTime=0;stoppedByUser=true};
+$('next').onclick=()=>step(1);$('prev').onclick=()=>step(-1);
+$('shuf').onclick=e=>{shuffle=!shuffle;e.target.classList.toggle('on',shuffle)};
+$('rep').onclick=e=>{repeat=!repeat;e.target.classList.toggle('on',repeat)};
+$('vol').oninput=e=>{au.volume=e.target.value};$('mute').onclick=e=>{au.muted=!au.muted;e.target.textContent=au.muted?'🔇':'🔊'};
+$('like').onclick=()=>{const s=queue[idx];if(!s)return;favs=favs.includes(s.id)?favs.filter(x=>x!==s.id):[...favs,s.id];localStorage.favs=JSON.stringify(favs);$('like').textContent=favs.includes(s.id)?'♥':'♡'};
+$('qb').onclick=()=>{const q=$('queue');q.style.display=q.style.display==='block'?'none':'block';drawQueue()};
+function drawQueue(){$('queue').innerHTML=queue.map((s,i)=>`<div><span>${i===idx?'▶ ':''}${esc(s.title)}</span><button onclick="rm(${i})">✕</button></div>`).join('')||'Queue is empty'}
+function rm(i){queue.splice(i,1);if(i<idx)idx--;drawQueue()}
+if('mediaSession' in navigator){const m=navigator.mediaSession;
+ m.setActionHandler('play',()=>au.play());m.setActionHandler('pause',()=>au.pause());
+ m.setActionHandler('previoustrack',()=>step(-1));m.setActionHandler('nexttrack',()=>step(1))}
+if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js');
+home();
+</script></body></html>
