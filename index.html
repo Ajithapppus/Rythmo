@@ -17,9 +17,10 @@ button{background:none;border:0;color:var(--fg);font-size:20px;cursor:pointer;pa
 input[type=range]{accent-color:var(--ac)}#seek{width:100%}
 #queue{position:fixed;right:0;bottom:130px;width:min(320px,100%);max-height:50vh;overflow:auto;background:var(--card);border-radius:14px 0 0 14px;padding:10px;display:none}
 #queue div{display:flex;justify-content:space-between;padding:6px 0}#msg{color:#ffb4b4;font-size:13px}
-</style></head><body>
+select{background:var(--card);color:var(--fg);border:0;border-radius:8px;padding:6px;font-size:14px}#src{margin-top:10px}</style></head><body>
 <h1>🎵 Rythmo</h1>
 <input id="q" placeholder="Search songs, artists, albums..." autocomplete="off">
+<select id="src"><option value="it">Previews (30 sec, all languages)</option><option value="jam">Full songs (free licensed music)</option></select>
 <div id="results"></div><div id="home"></div>
 <div id="queue"></div>
 <div id="player">
@@ -29,6 +30,7 @@ input[type=range]{accent-color:var(--ac)}#seek{width:100%}
   <button id="shuf" title="Shuffle">🔀</button><button id="prev">⏮</button><button id="play">▶️</button>
   <button id="stop">⏹</button><button id="next">⏭</button><button id="rep" title="Repeat">🔁</button>
   <button id="like">♡</button><button id="qb">☰</button>
+  <select id="sleep" title="Sleep timer"><option value="0">😴 Off</option><option value="15">15 min</option><option value="30">30 min</option><option value="45">45 min</option><option value="60">60 min</option><option value="end">End of song</option></select><small id="sl" style="color:var(--mut)"></small>
   <button id="mute">🔊</button><input id="vol" type="range" min="0" max="1" step=".05" value="1" style="width:80px">
  </div>
 </div>
@@ -46,14 +48,14 @@ function detect(s){return /[\u0D00-\u0D7F]/.test(s)?'Malayalam':/[\u0B80-\u0BFF]
 async function it(term,l,limit=25){const r=await fetch('https://itunes.apple.com/search?media=music&entity=song&country=IN&limit='+limit+'&term='+encodeURIComponent(term));
  const j=await r.json();return j.results.filter(t=>t.previewUrl).map(t=>({id:t.trackId,title:t.trackName,artist:t.artistName,album:t.collectionName||'',
  language:l||detect(t.trackName+t.artistName),genre:t.primaryGenreName||'',artwork:(t.artworkUrl100||'').replace('100x100','400x400'),preview_url:t.previewUrl,release_date:(t.releaseDate||'').slice(0,10)}))}
-async function home(){const h=$('home');h.innerHTML='<p style="color:var(--mut)">Loading...</p>';
+async function homeIt(){const h=$('home');h.innerHTML='<p style="color:var(--mut)">Loading...</p>';
  try{const all=await Promise.all(LANGS.map(l=>it(l+' new songs',l)));h.innerHTML='';
  section('New Releases',all.flat().sort((a,b)=>b.release_date.localeCompare(a.release_date)).slice(0,20),h);
  all.forEach((list,i)=>section(LANGS[i]+' Music',list,h));
  }catch(e){h.innerHTML='<p id="msg">Could not load music. Check your internet connection.</p>'}
  section('Recently Played',JSON.parse(localStorage.recent||'[]'),h)}
 let timer;$('q').oninput=e=>{clearTimeout(timer);timer=setTimeout(async()=>{const q=e.target.value.trim(),r=$('results');
- r.innerHTML='';if(!q)return;try{section('Results',await it(q,null,30),r)}catch{r.textContent='Network error'}},250)};
+ r.innerHTML='';if(!q)return;try{section('Results',await find(q),r)}catch{r.textContent='Network error'}},250)};
 function load(play){const s=queue[idx];if(!s)return;$('msg').textContent='';au.src=s.preview_url;$('t').textContent=s.title;$('a').textContent=s.artist;$('art').src=s.artwork;
  $('like').textContent=favs.includes(s.id)?'♥':'♡';
  const rp=[s,...JSON.parse(localStorage.recent||'[]').filter(x=>x.id!==s.id)].slice(0,20);localStorage.recent=JSON.stringify(rp);
@@ -61,7 +63,7 @@ function load(play){const s=queue[idx];if(!s)return;$('msg').textContent='';au.s
  if(play){stoppedByUser=false;au.play().catch(()=>$('msg').textContent='Sorry, this song is currently unavailable.')}drawQueue()}
 function step(d){if(!queue.length)return;idx=shuffle?Math.floor(Math.random()*queue.length):(idx+d+queue.length)%queue.length;load(true)}
 au.onerror=()=>$('msg').textContent='Sorry, this song is currently unavailable.';
-au.onended=()=>{if(repeat){au.currentTime=0;au.play()}else if(idx<queue.length-1||shuffle)step(1)};
+au.onended=()=>{if(stopAfter){stopAfter=false;$('sl').textContent='';$('sleep').value='0';return}if(repeat){au.currentTime=0;au.play()}else if(idx<queue.length-1||shuffle)step(1)};
 au.onplay=()=>$('play').textContent='⏸';au.onpause=()=>$('play').textContent='▶️';
 au.ontimeupdate=()=>{$('seek').value=au.duration?au.currentTime/au.duration*100:0};
 $('seek').oninput=e=>{if(au.duration)au.currentTime=e.target.value/100*au.duration};
@@ -79,5 +81,22 @@ if('mediaSession' in navigator){const m=navigator.mediaSession;
  m.setActionHandler('play',()=>au.play());m.setActionHandler('pause',()=>au.pause());
  m.setActionHandler('previoustrack',()=>step(-1));m.setActionHandler('nexttrack',()=>step(1))}
 if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js');
+const JAMENDO_ID='YOUR_CLIENT_ID'; // free key from developer.jamendo.com
+async function jam(params){if(JAMENDO_ID==='YOUR_CLIENT_ID')throw new Error('id');
+ const r=await fetch('https://api.jamendo.com/v3.0/tracks/?client_id='+JAMENDO_ID+'&format=json&limit=20&audioformat=mp32&imagesize=300&'+params);
+ const j=await r.json();return(j.results||[]).filter(t=>t.audio).map(t=>({id:'j'+t.id,title:t.name,artist:t.artist_name,album:t.album_name||'',language:'Full song',genre:'',artwork:t.image||'',preview_url:t.audio,release_date:t.releasedate||''}))}
+const find=q=>$('src').value==='jam'?jam('search='+encodeURIComponent(q)):it(q,null,30);
+async function home(){if($('src').value==='it')return homeIt();const h=$('home');h.innerHTML='<p style="color:var(--mut)">Loading...</p>';
+ try{const[n,p]=await Promise.all([jam('order=releasedate_desc'),jam('order=popularity_week')]);h.innerHTML='';
+ section('New Releases',n,h);section('Popular This Week',p,h);section('Recently Played',JSON.parse(localStorage.recent||'[]'),h)}
+ catch(e){h.innerHTML='<p id="msg">Add your free Jamendo client ID in index.html (see README) to play full songs.</p>'}}
+$('src').onchange=()=>{$('results').innerHTML='';$('q').value='';home()};
+let stopAfter=false,sleepT,sleepEnd=0,tick;
+$('sleep').onchange=e=>{clearTimeout(sleepT);clearInterval(tick);stopAfter=false;$('sl').textContent='';const v=e.target.value;
+ if(v==='0')return;if(v==='end'){stopAfter=true;$('sl').textContent='after this song';return}
+ sleepEnd=Date.now()+v*60000;sleepT=setTimeout(fadeStop,v*60000);
+ tick=setInterval(()=>{const s=Math.max(0,Math.round((sleepEnd-Date.now())/1000));$('sl').textContent=Math.floor(s/60)+':'+String(s%60).padStart(2,'0')},1000)};
+function fadeStop(){clearInterval(tick);$('sl').textContent='';$('sleep').value='0';const v0=au.volume;let v=v0;
+ const f=setInterval(()=>{v-=v0/10;if(v<=0.02){clearInterval(f);au.pause();au.volume=v0}else au.volume=v},300)}
 home();
 </script></body></html>
